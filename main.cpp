@@ -3,11 +3,23 @@
 #include <QQmlContext>
 #include <QtQml/qqml.h>
 
+#include "parallelengine.h"
 #include "wordlegame.h"
 
 int main(int argc, char *argv[])
 {
     qputenv("NO_COLOR", "1");
+
+    ParallelEngine::initialize(&argc, &argv);
+
+#ifdef WORDLE_USE_MPI
+    if (ParallelEngine::mpiEnabled() && ParallelEngine::mpiRank() != 0) {
+        const QStringList words = WordleGame::loadWordList();
+        ParallelEngine::runDictionaryWorker(words);
+        ParallelEngine::finalize();
+        return 0;
+    }
+#endif
 
     QGuiApplication app(argc, argv);
 
@@ -32,5 +44,9 @@ int main(int argc, char *argv[])
 
     engine.loadFromModule("wordle_game", "Main");
 
-    return QGuiApplication::exec();
+    const int code = QGuiApplication::exec();
+
+    ParallelEngine::shutdownMpiWorkers();
+    ParallelEngine::finalize();
+    return code;
 }

@@ -79,6 +79,21 @@ QString WordleGame::dailyDate() const
     return QDate::currentDate().toString(QStringLiteral("yyyy-MM-dd"));
 }
 
+bool WordleGame::mpiAvailable() const
+{
+    return ParallelEngine::mpiEnabled();
+}
+
+int WordleGame::mpiRank() const
+{
+    return ParallelEngine::mpiRank();
+}
+
+int WordleGame::mpiSize() const
+{
+    return ParallelEngine::mpiSize();
+}
+
 void WordleGame::setGameMode(const QString &mode)
 {
     QString normalized = mode;
@@ -92,6 +107,16 @@ void WordleGame::setGameMode(const QString &mode)
     newGame();
 }
 
+bool WordleGame::useOpenMp() const
+{
+    return m_gameMode == QStringLiteral("normal");
+}
+
+bool WordleGame::useMpi() const
+{
+    return m_gameMode == QStringLiteral("daily");
+}
+
 void WordleGame::pickTargetWord()
 {
     if (m_allWords.isEmpty()) {
@@ -100,10 +125,13 @@ void WordleGame::pickTargetWord()
     }
 
     if (m_gameMode == QStringLiteral("daily")) {
-        m_targetWord = ParallelEngine::broadcastDailyWord(m_allWords);
+        ParallelStats stats;
+        m_targetWord = ParallelEngine::broadcastDailyWord(m_allWords, &stats);
+        setParallelInfo(stats.detail);
     } else {
         const int index = QRandomGenerator::global()->bounded(m_allWords.size());
         m_targetWord = m_allWords.at(index);
+        setParallelInfo(QString());
     }
 }
 
@@ -177,7 +205,12 @@ void WordleGame::removeLetter()
 
 QStringList WordleGame::evaluateGuess(const QString &guess)
 {
-    return ParallelEngine::evaluateGuess(guess, m_targetWord);
+    ParallelStats stats;
+    const QStringList result = ParallelEngine::evaluateGuess(
+        guess, m_targetWord, useOpenMp(), &stats);
+    if (useOpenMp())
+        setParallelInfo(stats.detail);
+    return result;
 }
 
 int WordleGame::stateRank(const QString &state) const
@@ -213,11 +246,17 @@ bool WordleGame::submitGuess()
     for (int col = 0; col < kWordLen; ++col)
         guess += m_board[m_currentRow][col].value(QStringLiteral("letter")).toString();
 
-    if (!ParallelEngine::containsWord(m_allWords, guess)) {
+    ParallelStats stats;
+    if (!ParallelEngine::containsWord(m_allWords, guess, useOpenMp(), useMpi(), &stats)) {
         setMessage(QStringLiteral("不在词库中"));
+        if (useOpenMp() || useMpi())
+            setParallelInfo(stats.detail);
         emit invalidGuess();
         return false;
     }
+
+    if (useOpenMp() || useMpi())
+        setParallelInfo(stats.detail);
 
     if (m_submittedGuesses.contains(guess)) {
         setMessage(QStringLiteral("已经猜过这个词"));
@@ -264,6 +303,14 @@ void WordleGame::setMessage(const QString &message)
         return;
     m_message = message;
     emit messageChanged();
+}
+
+void WordleGame::setParallelInfo(const QString &info)
+{
+    if (m_parallelInfo == info)
+        return;
+    m_parallelInfo = info;
+    emit parallelInfoChanged();
 }
 
 void WordleGame::notifyBoardChanged()

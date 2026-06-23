@@ -21,7 +21,11 @@ class WordleGame : public QObject
     Q_PROPERTY(QString answerWord READ answerWord NOTIFY gameStatusChanged)
     Q_PROPERTY(QString gameMode READ gameMode WRITE setGameMode NOTIFY gameModeChanged)
     Q_PROPERTY(QString modeDescription READ modeDescription NOTIFY gameModeChanged)
+    Q_PROPERTY(QString parallelInfo READ parallelInfo NOTIFY parallelInfoChanged)
     Q_PROPERTY(QString dailyDate READ dailyDate NOTIFY gameModeChanged)
+    Q_PROPERTY(bool mpiAvailable READ mpiAvailable CONSTANT)
+    Q_PROPERTY(int mpiRank READ mpiRank CONSTANT)
+    Q_PROPERTY(int mpiSize READ mpiSize CONSTANT)
     Q_PROPERTY(QStringList availableModes READ availableModes CONSTANT)
 
 public:
@@ -39,7 +43,11 @@ public:
     QString answerWord() const { return m_targetWord; }
     QString gameMode() const { return m_gameMode; }
     QString modeDescription() const;
+    QString parallelInfo() const { return m_parallelInfo; }
     QString dailyDate() const;
+    bool mpiAvailable() const;
+    int mpiRank() const;
+    int mpiSize() const;
     QStringList availableModes() const;
 
     Q_INVOKABLE void setGameMode(const QString &mode);
@@ -60,6 +68,7 @@ signals:
     void gameStatusChanged();
     void messageChanged();
     void gameModeChanged();
+    void parallelInfoChanged();
     void rowSubmitted(int row);
     void invalidGuess();
 
@@ -71,8 +80,11 @@ private:
     void updateKeyboardLetter(const QChar &letter, const QString &state);
     int stateRank(const QString &state) const;
     void setMessage(const QString &message);
+    void setParallelInfo(const QString &info);
     void notifyBoardChanged();
     QVariantMap makeCell(const QString &letter, const QString &state, bool revealed) const;
+    bool useOpenMp() const;
+    bool useMpi() const;
 
     static constexpr int kWordLen = 5;
     static constexpr int kMaxRows = 6;
@@ -80,6 +92,7 @@ private:
     QStringList m_allWords;
     QString m_targetWord;
     QString m_gameMode = QStringLiteral("normal");
+    QString m_parallelInfo;
     int m_currentRow = 0;
     int m_currentCol = 0;
     QString m_gameStatus;
